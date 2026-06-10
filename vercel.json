@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/U11_league/HTML/$1" }
+  ]
+}

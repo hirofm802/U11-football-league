@@ -161,7 +161,6 @@ body{font-family:"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text
 .tb-red{background:#a32d2d;color:#fcebeb}
 .tb-warn{background:#e67e22;color:#fff}
 .tb-gray{background:rgba(255,255,255,.2);color:#fff}
-@keyframes tickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 </style>
 </head>
 <body>
@@ -462,11 +461,11 @@ function buildTickerMessages(teams){
     // ✅ 3位以内確定（残留確定）
     // 自分のmaxPtsより高い現在勝点を持つチームが2チーム以下
     // かつ、自分より上位になれる（maxPts > 自分のmaxPts）チームが2チーム以下
-    // 自分が全敗した場合の勝点 = t.pts（現在勝点）
-    // 相手のmaxPtsが自分の現在勝点を超えられる = 自分が3位以下になりうる
     const teamsAboveMe=ranked.filter((_,j)=>{
       if(j===i)return false;
-      return maxPts(ranked[j].name,ranked[j].pts)>t.pts;
+      // 相手の最大勝点が自分の最大勝点以上なら上位になりうる
+      return maxPts(ranked[j].name,ranked[j].pts)>myMax||
+             (maxPts(ranked[j].name,ranked[j].pts)===myMax&&ranked[j].pts>t.pts);
     });
     const confirmed3rd=teamsAboveMe.length<=2;
 
@@ -494,7 +493,12 @@ function buildTickerMessages(teams){
     }
   });
 
-  // 同点タイブレーク警告は速報から除外
+  // ⚠️ 同点タイブレーク警告（全試合終了後）
+  for(let i=0;i<ranked.length-1;i++){
+    if(ranked[i].pts===ranked[i+1].pts&&gamesLeft(ranked[i].name)===0&&gamesLeft(ranked[i+1].name)===0){
+      msgs.push({emoji:'⚠️',text:ranked[i].name+'・'+ranked[i+1].name+' 同点 タイブレーク適用',badge:'同点',cls:'tb-warn'});
+    }
+  }
 
   // デフォルト
   if(msgs.length===0){
@@ -517,8 +521,9 @@ let weatherMsgs = [];
 
 async function fetchWeather(){
   try{
-    // wttr.in 現在の天気（福岡市）
-    const url='https://wttr.in/Fukuoka?format=j1';
+    // wttr.in 現在の天気（福岡市）リアルタイム
+    // 佐賀市富士町大字関屋（富士山村広場）lat:33.4078, lon:130.2947
+    const url='https://wttr.in/33.4078,130.2947?format=j1';
     const res=await fetch(url);
     const data=await res.json();
 
@@ -541,47 +546,22 @@ async function fetchWeather(){
     const temp=cur.temp_C;
     const humid=cur.humidity;
     const feels=cur.FeelsLikeC;
+    const wind=cur.windspeedKmph;
 
+    // 現在の天気（常時流す）
     weatherMsgs.push({
       emoji:wc.emoji,
-      text:`福岡 現在 ${wc.label} ${temp}℃（体感${feels}℃）湿度${humid}%`,
+      text:`🏟️会場 現在 ${wc.label} 🌡️${temp}℃（体感${feels}℃）💧湿度${humid}% 💨${wind}km/h`,
       badge:'現在の天気',
       cls:'tb-gray'
     });
-
-    // 6/14の予報（当日〜3日以内の場合）
-    const today=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'}));
-    const target=new Date('2026-06-14');
-    const diffDays=Math.round((target-today)/(1000*60*60*24));
-
-    if(diffDays>=0&&diffDays<=2&&data.weather&&data.weather[diffDays]){
-      const dayData=data.weather[diffDays];
-      weatherMsgs.push({
-        emoji:'📅',
-        text:`6/14予報 最高${dayData.maxtempC}℃ 最低${dayData.mintempC}℃`,
-        badge:'予報',
-        cls:'tb-gray'
-      });
-      // 午前の予報（9時・12時）
-      [{h:9,idx:3},{h:12,idx:4}].forEach(({h,idx})=>{
-        const hr=dayData.hourly[idx];
-        if(!hr)return;
-        const w=wcLabel(hr.weatherCode);
-        weatherMsgs.push({
-          emoji:w.emoji,
-          text:`富士山村広場 ${h}:00予報 ${w.label} ${hr.tempC}℃ 湿度${hr.humidity}%`,
-          badge:'天気予報',
-          cls:'tb-gray'
-        });
-      });
-    }
 
     const{sorted}=calcStandings();
     renderTicker2(sorted);
 
   }catch(e){
     console.error('Weather fetch failed',e);
-    weatherMsgs=[{emoji:'🌤️',text:'天気情報を取得できませんでした',badge:'天気',cls:'tb-gray'}];
+    // エラー時はメッセージなしで続行
     const{sorted}=calcStandings();
     renderTicker2(sorted);
   }
@@ -590,189 +570,32 @@ async function fetchWeather(){
 function renderTicker2(teams){
   const confirmMsgs=buildTickerMessages(teams);
   const allMsgs=[...confirmMsgs,...weatherMsgs];
-  const doubled=[...allMsgs,...allMsgs];
   const inner=document.getElementById('ticker-inner');
-  if(!inner)return;
-  inner.innerHTML=doubled.map(m=>
+  const track=document.querySelector('.ticker-track');
+  if(!inner||!track)return;
+
+  // コンテンツを2セット並べてシームレスループ
+  const html=allMsgs.map(m=>
     `<span class="ticker-item">${m.emoji} ${m.text} <span class="ticker-badge ${m.cls}">${m.badge}</span></span>`
   ).join('');
-}
+  inner.innerHTML=html+html;
 
-function renderMatches(){
-  const grid=document.getElementById('matches-grid');
-  grid.innerHTML='';
-  MATCHES.forEach(m=>{
-    const live=isLive(m.koH,m.koM);
-    const card=document.createElement('div');
-    card.className='match-card'+(live?' is-live':'');
-    card.id='card-'+m.id;
+  // 既存アニメーション停止
+  if(window._tickerRAF)cancelAnimationFrame(window._tickerRAF);
+  inner.style.cssText='display:inline-flex;align-items:center;height:38px;white-space:nowrap;will-change:transform;transform:translateX(0)';
+  window._tickerPos=0;
+  const speed=0.6; // px/frame
 
-    const hdr=document.createElement('div');hdr.className='match-header';
-    const tEl=document.createElement('span');tEl.className='match-time';tEl.textContent='KO '+m.time;
-    hdr.appendChild(tEl);
-    if(live){const b=document.createElement('span');b.className='live-badge';b.textContent='LIVE';hdr.appendChild(b);}
-    card.appendChild(hdr);
-
-    const row=document.createElement('div');row.className='match-row';
-    const hBlk=document.createElement('div');hBlk.className='match-team-block';
-    hBlk.appendChild(makeLogoEl(m.home,'lg'));
-    const hn=document.createElement('div');hn.className='match-team-name';hn.textContent=m.home;hBlk.appendChild(hn);
-
-    const sb=document.createElement('div');sb.className='score-box';
-    const ih=document.createElement('input');ih.className='score-input';ih.type='number';ih.min=0;ih.max=20;ih.id=m.id+'_h';ih.placeholder='-';
-    const sep=document.createElement('span');sep.className='score-sep';sep.textContent=':';
-    const ia=document.createElement('input');ia.className='score-input';ia.type='number';ia.min=0;ia.max=20;ia.id=m.id+'_a';ia.placeholder='-';
-    sb.append(ih,sep,ia);
-
-    const aBlk=document.createElement('div');aBlk.className='match-team-block';
-    aBlk.appendChild(makeLogoEl(m.away,'lg'));
-    const an=document.createElement('div');an.className='match-team-name';an.textContent=m.away;aBlk.appendChild(an);
-
-    row.append(hBlk,sb,aBlk);
-    card.appendChild(row);
-    grid.appendChild(card);
-    [ih,ia].forEach(inp=>{inp.addEventListener('input',renderStandings);inp.addEventListener('change',saveScores);});
-  });
-}
-
-function renderStandings(){
-  const{sorted,notes}=calcStandings();
-  const tbody=document.getElementById('standings-body');tbody.innerHTML='';
-  sorted.forEach((r,i)=>{
-    const rank=i+1,rc=rank===1?'r1':rank===2?'r2':rank===3?'r3':'r-other';
-    const isUs=r.name==='東福岡';
-    const tr=document.createElement('tr');if(isUs)tr.className='row-us';
-    const tdR=document.createElement('td');tdR.className='rank-cell';
-    const rb=document.createElement('span');rb.className='rank-badge '+rc;rb.textContent=rank;tdR.appendChild(rb);
-
-    const tdT=document.createElement('td');tdT.className='col-team';
-    const inn=document.createElement('div');inn.className='team-cell-inner';
-    inn.appendChild(makeLogoEl(r.name,'sm'));
-    const ns=document.createElement('span');
-    ns.className='team-name-cell'+(isUs?' team-name-us':'');
-    ns.textContent=r.name;
-    inn.appendChild(ns);
-    // 「我々」削除、★のみ
-    if(isUs){
-      const star=document.createElement('span');
-      star.textContent='★';
-      star.style.cssText='color:#1a6b3c;font-size:13px;margin-left:3px;';
-      inn.appendChild(star);
+  // 幅確定を待ってからスタート
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const half=inner.scrollWidth/2;
+    if(half<=0)return;
+    function tick(){
+      window._tickerPos-=speed;
+      if(window._tickerPos<=-half)window._tickerPos=0;
+      inner.style.transform=`translateX(${window._tickerPos}px)`;
+      window._tickerRAF=requestAnimationFrame(tick);
     }
-    tdT.appendChild(inn);
-
-    tr.append(tdR,tdT);
-    const vals=[r.pts,r.played,r.w,r.d,r.l,r.gf,r.ga];
-    vals.forEach((v,vi)=>{
-      const td=document.createElement('td');
-      if(vi===0)td.className='pts-cell';
-      if([1,5,6].includes(vi))td.className=(td.className?td.className+' ':'')+'hide-sp';
-      td.textContent=v;tr.appendChild(td);
-    });
-    const gdTd=document.createElement('td');
-    const gd=r.gd;gdTd.className=gd>0?'gd-pos':gd<0?'gd-neg':'';
-    gdTd.textContent=(gd>=0?'+':'')+gd;
-    tr.appendChild(gdTd);
-    tbody.appendChild(tr);
-  });
-  const ne=document.getElementById('tb-notes');ne.innerHTML='';
-  renderTicker();
-  notes.forEach(n=>{const d=document.createElement('div');d.className='tb-note';d.textContent=n;ne.appendChild(d);});
+    window._tickerRAF=requestAnimationFrame(tick);
+  }));
 }
-
-function renderPast(){
-  const tbody=document.getElementById('past-body');tbody.innerHTML='';
-  let lastDate='';
-  PAST_MATCHES.forEach(m=>{
-    // 日付行（日付が変わった時だけ）
-    if(m.date!==lastDate){
-      const trD=document.createElement('tr');trD.className='past-row-date';
-      const tdD=document.createElement('td');tdD.className='past-date-cell';tdD.colspan=1;
-      tdD.textContent='📅 '+m.date;
-      trD.appendChild(tdD);tbody.appendChild(trD);
-      lastDate=m.date;
-    }
-    // 試合行
-    const trM=document.createElement('tr');trM.className='past-row-match';
-    const tdM=document.createElement('td');tdM.className='past-match-cell';
-    const inner=document.createElement('div');inner.className='past-match-inner';
-
-    // home team: ロゴ(外) → 名前(内)
-    const hDiv=document.createElement('div');hDiv.className='past-team home';
-    hDiv.appendChild(makeLogoEl(m.home,'past'));
-    const hn=document.createElement('span');hn.className='past-team-name'+(m.home==='東福岡'?' past-us':'');hn.textContent=m.home;
-    hDiv.appendChild(hn);
-
-    // score
-    const sc=document.createElement('span');sc.className='result-score';sc.textContent=m.hs+' - '+m.as;
-
-    // away team: 名前(内) → ロゴ(外)
-    const aDiv=document.createElement('div');aDiv.className='past-team away';
-    const an=document.createElement('span');an.className='past-team-name'+(m.away==='東福岡'?' past-us':'');an.textContent=m.away;
-    aDiv.appendChild(an);
-    aDiv.appendChild(makeLogoEl(m.away,'past'));
-
-    inner.append(hDiv,sc,aDiv);
-    tdM.appendChild(inner);trM.appendChild(tdM);tbody.appendChild(trM);
-  });
-}
-
-function resetAll(){
-  if(!confirm('スコアをリセットしますか？')) return;
-  MATCHES.forEach(m=>{
-    const h=document.getElementById(m.id+'_h'),a=document.getElementById(m.id+'_a');
-    if(h)h.value='';if(a)a.value='';
-  });
-  renderStandings();
-  // Firebaseも同時にクリア
-  fetch(FIREBASE_URL+'/scores.json', {method:'DELETE'})
-    .then(()=>{ const el=document.getElementById('sync-status'); if(el){el.textContent='✓ リセット済み';setTimeout(()=>el.textContent='',2000);} })
-    .catch(e=>console.error('Reset failed',e));
-}
-
-function refreshLive(){
-  let changed=false;
-  MATCHES.forEach(m=>{
-    const card=document.getElementById('card-'+m.id);if(!card)return;
-    if(isLive(m.koH,m.koM)!==card.classList.contains('is-live'))changed=true;
-  });
-  if(changed)renderMatches();
-}
-
-
-const PASSWORD = 'hiro';
-let isUnlocked = false;
-
-function toggleLock() {
-  if(isUnlocked) {
-    // lock
-    isUnlocked = false;
-    document.getElementById('matches-grid').classList.add('input-locked');
-    document.getElementById('lock-status').textContent = '🔒 閲覧モード';
-    document.getElementById('lock-status').className = 'lock-status';
-    document.getElementById('lock-btn').textContent = 'スコア入力';
-  } else {
-    // unlock
-    const pw = prompt('パスワードを入力してください：');
-    if(pw === PASSWORD) {
-      isUnlocked = true;
-      document.getElementById('matches-grid').classList.remove('input-locked');
-      document.getElementById('lock-status').textContent = '🔓 入力モード（Hiro）';
-      document.getElementById('lock-status').className = 'lock-status unlocked';
-      document.getElementById('lock-btn').textContent = 'ロック';
-    } else if(pw !== null) {
-      alert('パスワードが違います');
-    }
-  }
-}
-renderMatches();
-document.getElementById('matches-grid').classList.add('input-locked');
-renderStandings();
-renderPast();
-loadScores();
-startPolling();
-fetchWeather();
-setInterval(fetchWeather, 3600000);
-</script>
-</body>
-</html>

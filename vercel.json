@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/U11_league/HTML/$1" }
+    { "source": "/logos/:file", "destination": "/U11_league/HTML/logos/:file" },
+    { "source": "/(.*)", "destination": "/U11_league/HTML/index.html" }
   ]
 }

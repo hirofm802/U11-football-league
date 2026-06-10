@@ -62,8 +62,7 @@ body{font-family:"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text
 .match-team-logo{width:44px;height:44px;object-fit:contain;border-radius:6px;}
 .match-team-name{font-size:11px;font-weight:500;color:var(--text);text-align:center;line-height:1.2;word-break:keep-all}
 .score-box{display:flex;align-items:center;gap:3px;flex-shrink:0}
-.score-input{width:34px;height:34px;text-align:center;font-family:"Barlow Condensed",sans-serif;font-size:18px;font-weight:700;border:1.5px solid var(--border);border-radius:6px;background:#fafbf9;color:var(--text);transition:border-color .15s;-moz-appearance:textfield}
-.score-input::-webkit-outer-spin-button,.score-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.score-input{width:34px;height:34px;text-align:center;font-family:"Barlow Condensed",sans-serif;font-size:18px;font-weight:700;border:1.5px solid var(--border);border-radius:6px;background:#fafbf9;color:var(--text);transition:border-color .15s}
 .score-input:focus{outline:none;border-color:var(--green-mid)}
 .score-input:not(:placeholder-shown){background:var(--green-light);border-color:var(--green-mid)}
 .match-card.is-live .score-input:not(:placeholder-shown){background:#ffe0e0;border-color:var(--live-red)}
@@ -206,7 +205,7 @@ body{font-family:"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text
     </table>
   </div>
   <div class="footer">
-    順位決定：①勝点 ②当該チーム間の対戦成績 ③当該チーム間の得失点差 ④当該チーム間の総得点 ⑤抽選
+    順位決定：①勝点数 ②当該チーム間の対戦成績 ③総得失点差 ④総得点数 ⑤抽選
   </div>
 </main>
 <script>
@@ -393,10 +392,8 @@ function calcStandings(){
       const ns=grp.map(x=>x.name);
       const hp=t=>ns.reduce((s,n)=>n!==t.name?(h2h[t.name]?.[n]?.pts||0)+s:s,0);
       if(hp(b)!==hp(a))return hp(b)-hp(a);
-      const hg=t=>ns.reduce((s,n)=>n!==t.name?((h2h[t.name]?.[n]?.gf||0)-(h2h[t.name]?.[n]?.ga||0))+s:s,0);
-      if(hg(b)!==hg(a))return hg(b)-hg(a);
-      const hf=t=>ns.reduce((s,n)=>n!==t.name?(h2h[t.name]?.[n]?.gf||0)+s:s,0);
-      if(hf(b)!==hf(a))return hf(b)-hf(a);
+      if(b.gd!==a.gd)return b.gd-a.gd;
+      if(b.gf!==a.gf)return b.gf-a.gf;
       return 0;
     });
     const ns=grp.map(x=>x.name).join('・');
@@ -404,13 +401,9 @@ function calcStandings(){
     const hpL=grp.map(t=>nms.reduce((s,n)=>n!==t.name?(h2h[t.name]?.[n]?.pts||0)+s:s,0));
     if(new Set(hpL).size>1)notes.push(`【${ns}】同勝点 → ②当該チーム間の対戦成績で決定`);
     else{
-      const hgL=grp.map(t=>nms.reduce((s,n)=>n!==t.name?((h2h[t.name]?.[n]?.gf||0)-(h2h[t.name]?.[n]?.ga||0))+s:s,0));
-      if(new Set(hgL).size>1)notes.push(`【${ns}】→ ③当該チーム間の得失点差で決定`);
-      else{
-        const hfL=grp.map(t=>nms.reduce((s,n)=>n!==t.name?(h2h[t.name]?.[n]?.gf||0)+s:s,0));
-        if(new Set(hfL).size>1)notes.push(`【${ns}】→ ④当該チーム間の総得点で決定`);
-        else notes.push(`【${ns}】全項目タイ → 抽選`);
-      }
+      if(new Set(grp.map(x=>x.gd)).size>1)notes.push(`【${ns}】同勝点・同当該成績 → ③総得失点差で決定`);
+      else if(new Set(grp.map(x=>x.gf)).size>1)notes.push(`【${ns}】→ ④総得点数で決定`);
+      else notes.push(`【${ns}】全項目タイ → ⑤抽選`);
     }
     sorted.push(...grp);
   }

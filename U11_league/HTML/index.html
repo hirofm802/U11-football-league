@@ -281,6 +281,161 @@ function startPolling() {
     refreshLive();
   }, 15000);
 }
+
+const PASSWORD = 'hiro';
+let isUnlocked = false;
+
+function toggleLock() {
+  if(isUnlocked) {
+    isUnlocked = false;
+    document.getElementById('matches-grid').classList.add('input-locked');
+    document.getElementById('lock-status').textContent = '🔒 閲覧モード';
+    document.getElementById('lock-status').className = 'lock-status';
+    document.getElementById('lock-btn').textContent = 'スコア入力';
+  } else {
+    const pw = prompt('パスワードを入力してください：');
+    if(pw === PASSWORD) {
+      isUnlocked = true;
+      document.getElementById('matches-grid').classList.remove('input-locked');
+      document.getElementById('lock-status').textContent = '🔓 入力モード（Hiro）';
+      document.getElementById('lock-status').className = 'lock-status unlocked';
+      document.getElementById('lock-btn').textContent = 'ロック';
+    } else if(pw !== null) {
+      alert('パスワードが違います');
+    }
+  }
+}
+function renderMatches(){
+  const grid=document.getElementById('matches-grid');
+  grid.innerHTML='';
+  MATCHES.forEach(m=>{
+    const live=isLive(m.koH,m.koM);
+    const card=document.createElement('div');
+    card.className='match-card'+(live?' is-live':'');
+    card.id='card-'+m.id;
+
+    const hdr=document.createElement('div');hdr.className='match-header';
+    const tEl=document.createElement('span');tEl.className='match-time';tEl.textContent='KO '+m.time;
+    hdr.appendChild(tEl);
+    if(live){const b=document.createElement('span');b.className='live-badge';b.textContent='LIVE';hdr.appendChild(b);}
+    card.appendChild(hdr);
+
+    const row=document.createElement('div');row.className='match-row';
+    const hBlk=document.createElement('div');hBlk.className='match-team-block';
+    hBlk.appendChild(makeLogoEl(m.home,'lg'));
+    const hn=document.createElement('div');hn.className='match-team-name';hn.textContent=m.home;hBlk.appendChild(hn);
+
+    const sb=document.createElement('div');sb.className='score-box';
+    const ih=document.createElement('input');ih.className='score-input';ih.type='number';ih.min=0;ih.max=20;ih.id=m.id+'_h';ih.placeholder='-';
+    const sep=document.createElement('span');sep.className='score-sep';sep.textContent=':';
+    const ia=document.createElement('input');ia.className='score-input';ia.type='number';ia.min=0;ia.max=20;ia.id=m.id+'_a';ia.placeholder='-';
+    sb.append(ih,sep,ia);
+
+    const aBlk=document.createElement('div');aBlk.className='match-team-block';
+    aBlk.appendChild(makeLogoEl(m.away,'lg'));
+    const an=document.createElement('div');an.className='match-team-name';an.textContent=m.away;aBlk.appendChild(an);
+
+    row.append(hBlk,sb,aBlk);
+    card.appendChild(row);
+    grid.appendChild(card);
+    [ih,ia].forEach(inp=>{
+      inp.addEventListener('input',renderStandings);
+      inp.addEventListener('change',saveScores);
+    });
+  });
+}
+
+function renderStandings(){
+  const{sorted,notes}=calcStandings();
+  const tbody=document.getElementById('standings-body');tbody.innerHTML='';
+  sorted.forEach((r,i)=>{
+    const rank=i+1,rc=rank===1?'r1':rank===2?'r2':rank===3?'r3':'r-other';
+    const isUs=r.name==='東福岡';
+    const tr=document.createElement('tr');if(isUs)tr.className='row-us';
+    const tdR=document.createElement('td');tdR.className='rank-cell';
+    const rb=document.createElement('span');rb.className='rank-badge '+rc;rb.textContent=rank;tdR.appendChild(rb);
+    const tdT=document.createElement('td');tdT.className='col-team';
+    const inn=document.createElement('div');inn.className='team-cell-inner';
+    inn.appendChild(makeLogoEl(r.name,'sm'));
+    const ns=document.createElement('span');ns.className='team-name-cell'+(isUs?' team-name-us':'');ns.textContent=r.name;inn.appendChild(ns);
+    if(isUs){const s=document.createElement('span');s.textContent='★';s.style.cssText='color:#1a6b3c;font-size:13px;margin-left:3px;';inn.appendChild(s);}
+    tdT.appendChild(inn);
+    tr.append(tdR,tdT);
+    const vals=[r.pts,r.played,r.w,r.d,r.l,r.gf,r.ga];
+    vals.forEach((v,vi)=>{
+      const td=document.createElement('td');
+      if(vi===0)td.className='pts-cell';
+      if([1,5,6].includes(vi))td.className=(td.className?td.className+' ':'')+'hide-sp';
+      td.textContent=v;tr.appendChild(td);
+    });
+    const gdTd=document.createElement('td');
+    const gd=r.gd;gdTd.className=gd>0?'gd-pos':gd<0?'gd-neg':'';gdTd.textContent=(gd>=0?'+':'')+gd;
+    tr.appendChild(gdTd);tbody.appendChild(tr);
+  });
+  const ne=document.getElementById('tb-notes');ne.innerHTML='';
+  notes.forEach(n=>{const d=document.createElement('div');d.className='tb-note';d.textContent=n;ne.appendChild(d);});
+  renderTicker();
+}
+
+function renderPast(){
+  const tbody=document.getElementById('past-body');tbody.innerHTML='';
+  let lastDate='';
+  PAST_MATCHES.forEach(m=>{
+    if(m.date!==lastDate){
+      const trD=document.createElement('tr');trD.className='past-row-date';
+      const tdD=document.createElement('td');tdD.className='past-date-cell';
+      tdD.textContent='📅 '+m.date;
+      trD.appendChild(tdD);tbody.appendChild(trD);
+      lastDate=m.date;
+    }
+    const trM=document.createElement('tr');trM.className='past-row-match';
+    const tdM=document.createElement('td');tdM.className='past-match-cell';
+    const inner=document.createElement('div');inner.className='past-match-inner';
+    const hDiv=document.createElement('div');hDiv.className='past-team home';
+    hDiv.appendChild(makeLogoEl(m.home,'past'));
+    const hn=document.createElement('span');hn.className='past-team-name'+(m.home==='東福岡'?' past-us':'');hn.textContent=m.home;
+    hDiv.appendChild(hn);
+    const sc=document.createElement('span');sc.className='result-score';sc.textContent=m.hs+' - '+m.as;
+    const aDiv=document.createElement('div');aDiv.className='past-team away';
+    const an=document.createElement('span');an.className='past-team-name'+(m.away==='東福岡'?' past-us':'');an.textContent=m.away;
+    aDiv.appendChild(an);
+    aDiv.appendChild(makeLogoEl(m.away,'past'));
+    inner.append(hDiv,sc,aDiv);
+    tdM.appendChild(inner);trM.appendChild(tdM);tbody.appendChild(trM);
+  });
+}
+
+function resetAll(){
+  if(!confirm('スコアをリセットしますか？'))return;
+  MATCHES.forEach(m=>{
+    const h=document.getElementById(m.id+'_h'),a=document.getElementById(m.id+'_a');
+    if(h)h.value='';if(a)a.value='';
+  });
+  renderStandings();
+  fetch(FIREBASE_URL+'/scores.json',{method:'DELETE'})
+    .then(()=>{const el=document.getElementById('sync-status');if(el){el.textContent='✓ リセット済み';setTimeout(()=>el.textContent='',2000);}})
+    .catch(e=>console.error('Reset failed',e));
+}
+
+function refreshLive(){
+  let changed=false;
+  MATCHES.forEach(m=>{
+    const card=document.getElementById('card-'+m.id);if(!card)return;
+    if(isLive(m.koH,m.koM)!==card.classList.contains('is-live'))changed=true;
+  });
+  if(changed)renderMatches();
+}
+
+// 初期化
+renderMatches();
+document.getElementById('matches-grid').classList.add('input-locked');
+renderStandings();
+renderPast();
+loadScores();
+startPolling();
+fetchWeather();
+setInterval(fetchWeather, 1800000);
+
 const LOGOS = {
   'MARS':      'logos/MARS (2).png',
   '東福岡':    'logos/東福岡.png',

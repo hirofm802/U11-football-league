@@ -147,9 +147,14 @@ body{font-family:"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text
 .lock-status{font-size:11px;color:var(--text-muted);font-family:"Barlow Condensed",sans-serif;letter-spacing:.05em}
 .lock-status.unlocked{color:var(--green-mid)}
 
-.weather-bar{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text)}
-.weather-bar .wicon{font-size:18px}
-.weather-bar .wtime{margin-left:auto;font-size:10px;color:var(--text-muted);font-family:"Barlow Condensed",sans-serif}
+.weather-bar{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);white-space:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.weather-bar::-webkit-scrollbar{display:none}
+.weather-bar .wicon{font-size:18px;flex-shrink:0}
+.weather-bar .wtime{margin-left:auto;font-size:10px;color:var(--text-muted);font-family:"Barlow Condensed",sans-serif;flex-shrink:0;white-space:nowrap}
+@media(max-width:500px){
+  .weather-bar{font-size:11px;padding:8px 10px;gap:6px}
+  .weather-bar .wicon{font-size:16px}
+}
 .ticker-wrap{background:#0f5c2e;border-radius:8px;overflow:hidden;display:flex;align-items:center;height:38px;margin-bottom:16px}
 .ticker-label{background:#f0a500;color:#3d2800;font-family:"Barlow Condensed",sans-serif;font-size:11px;font-weight:600;padding:0 12px;height:100%;display:flex;align-items:center;white-space:nowrap;flex-shrink:0;letter-spacing:.08em}
 .ticker-track{flex:1;overflow:hidden;position:relative;height:100%}
@@ -550,11 +555,7 @@ async function fetchWeather(){
 
     const bar=document.getElementById('weather-bar');
     if(bar){
-      bar.innerHTML=`
-        <span class="wicon">${wc.emoji}</span>
-        <span>気象情報：${wc.label}　🌡️${cur.temp_C}℃　💧湿度${cur.humidity}%　💨風速${cur.windspeedKmph}km/h</span>
-        <span class="wtime">(${mm}/${dd} ${hh}:${mi}現在)</span>
-      `;
+      bar.innerHTML=`<span class="wicon">${wc.emoji}</span><span>${wc.label} 🌡️${cur.temp_C}℃ 💧${cur.humidity}% 💨${cur.windspeedKmph}km/h</span><span class="wtime">(${mm}/${dd} ${hh}:${mi})</span>`;
     }
   }catch(e){
     console.error('Weather failed',e);

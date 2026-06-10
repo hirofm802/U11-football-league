@@ -150,8 +150,7 @@ body{font-family:"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text
 .ticker-wrap{background:#0f5c2e;border-radius:8px;overflow:hidden;display:flex;align-items:center;height:38px;margin-bottom:16px}
 .ticker-label{background:#f0a500;color:#3d2800;font-family:"Barlow Condensed",sans-serif;font-size:11px;font-weight:600;padding:0 12px;height:100%;display:flex;align-items:center;white-space:nowrap;flex-shrink:0;letter-spacing:.08em}
 .ticker-track{flex:1;overflow:hidden;position:relative;height:100%}
-.ticker-inner{display:inline-flex;align-items:center;height:38px;white-space:nowrap;animation:tickerScroll 22s linear infinite}
-.ticker-inner:hover{animation-play-state:paused}
+.ticker-inner{display:inline-flex;align-items:center;height:38px;white-space:nowrap}
 .ticker-item{display:inline-flex;align-items:center;gap:6px;padding:0 18px;font-size:12px;font-weight:500;color:#fff;border-right:1px solid rgba(255,255,255,.15);height:100%;font-family:"Noto Sans JP",sans-serif}
 .ticker-badge{font-size:10px;padding:1px 7px;border-radius:4px;font-weight:500;font-family:"Barlow Condensed",sans-serif;letter-spacing:.05em}
 .tb-gold{background:#f0a500;color:#3d2800}
@@ -161,7 +160,9 @@ body{font-family:"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text
 .tb-red{background:#a32d2d;color:#fcebeb}
 .tb-warn{background:#e67e22;color:#fff}
 .tb-gray{background:rgba(255,255,255,.2);color:#fff}
+.tb-blue{background:#185fa5;color:#e6f1fb}
 @keyframes tickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
 </style>
 </head>
 <body>
@@ -438,8 +439,6 @@ function calcStandings(){
 
 function buildTickerMessages(teams){
   const msgs=[];
-
-  // 入力済み試合数
   const enteredCount=MATCHES.filter(m=>getScore(m.id)!==null).length;
 
   function gamesLeft(name){
@@ -449,45 +448,52 @@ function buildTickerMessages(teams){
 
   const ranked=teams;
 
-  // 3試合未満はデフォルトのみ
+  // ── 固定メッセージ（常時） ──
+  msgs.push({emoji:'🌟',text:'東福岡は2連勝で優勝🏆です。応援しましょう！',badge:'注目',cls:'tb-blue'});
+
+  // ── 3試合未満はデフォルトのみ ──
   if(enteredCount<3){
     msgs.push({emoji:'📊',text:'現在 '+ranked[0].name+' 首位（勝点'+ranked[0].pts+'）',badge:'AS IT STANDS',cls:'tb-gray'});
-    msgs.push({emoji:'🔥',text:'最終節 全5試合の結果で順位が決まります',badge:'注目',cls:'tb-gray'});
+    msgs.push({emoji:'🔥',text:'最終節 全5試合の結果で順位が決まります',badge:'情報',cls:'tb-gray'});
     return msgs;
   }
 
+  // ── 各チーム個別判定 ──
   ranked.forEach((t,i)=>{
     const myMax=maxPts(t.name,t.pts);
 
-    // ✅ 3位以内確定（残留確定）
-    // 自分のmaxPtsより高い現在勝点を持つチームが2チーム以下
-    // かつ、自分より上位になれる（maxPts > 自分のmaxPts）チームが2チーム以下
-    const teamsAboveMe=ranked.filter((_,j)=>{
+    // ✅ 残留確定（3位以内確定）
+    // 条件：自分のmaxPtsより高くなれるチームが2チーム以下
+    // = 他チームのmaxPtsが自分のmaxPtsを超えるチームが2以下
+    const teamsCanBeatMe=ranked.filter((_,j)=>{
       if(j===i)return false;
-      // 相手の最大勝点が自分の最大勝点以上なら上位になりうる
-      return maxPts(ranked[j].name,ranked[j].pts)>myMax||
-             (maxPts(ranked[j].name,ranked[j].pts)===myMax&&ranked[j].pts>t.pts);
+      return maxPts(ranked[j].name,ranked[j].pts)>myMax;
     });
-    const confirmed3rd=teamsAboveMe.length<=2;
+    const safeTop3=teamsCanBeatMe.length<=2;
 
-    if(confirmed3rd){
-      if(i===0&&t.pts>maxPts(ranked[1].name,ranked[1].pts)){
-        msgs.push({emoji:'🏆',text:t.name+' 優勝確定！',badge:'優勝',cls:'tb-gold'});
-      } else if(i===1&&t.pts>maxPts(ranked[2].name,ranked[2].pts)){
+    if(safeTop3){
+      // 順位確定
+      if(i===0){
+        // 優勝確定：2位のmaxPtsが自分の現在勝点以下
+        if(maxPts(ranked[1].name,ranked[1].pts)<t.pts){
+          msgs.push({emoji:'🏆',text:t.name+' 優勝確定！',badge:'優勝',cls:'tb-gold'});
+        } else {
+          msgs.push({emoji:'🏆',text:t.name+' 現在首位',badge:'1位',cls:'tb-gold'});
+        }
+      } else if(i===1&&maxPts(ranked[2].name,ranked[2].pts)<t.pts){
         msgs.push({emoji:'🥈',text:t.name+' 2位確定',badge:'2位',cls:'tb-silver'});
-      } else if(i===2&&t.pts>maxPts(ranked[3].name,ranked[3].pts)){
+      } else if(i===2&&maxPts(ranked[3].name,ranked[3].pts)<t.pts){
         msgs.push({emoji:'🥉',text:t.name+' 3位確定',badge:'3位',cls:'tb-bronze'});
       }
       msgs.push({emoji:'✅',text:t.name+' 1部残留確定',badge:'残留',cls:'tb-green'});
     }
 
-    // ⬇️ 4位以下確定（プレイオフ確定）
-    // 自分の最大勝点が、他の3チーム以上の現在勝点を下回る
-    // つまり何があっても3位以内に入れない
+    // ⬇️ プレイオフ確定（4位以下確定）
+    // 条件：現在勝点が自分のmaxPtsより高いチームが3チーム以上
+    // = どう頑張っても3位以内に入れない
     const teamsDefinitelyAbove=ranked.filter((_,j)=>{
       if(j===i)return false;
-      // 相手の現在勝点が自分のmaxPtsより大きい = 確実に上位
-      return ranked[j].pts>myMax;
+      return ranked[j].pts>myMax; // 相手の現在勝点 > 自分の最大勝点
     });
     if(teamsDefinitelyAbove.length>=3){
       msgs.push({emoji:'⬇️',text:t.name+' プレイオフ確定',badge:'PO',cls:i>=3?'tb-red':'tb-warn'});
@@ -501,10 +507,9 @@ function buildTickerMessages(teams){
     }
   }
 
-  // デフォルト
-  if(msgs.length===0){
+  // デフォルト補完
+  if(msgs.length<=1){
     msgs.push({emoji:'📊',text:'現在 '+ranked[0].name+' 首位（勝点'+ranked[0].pts+'）',badge:'AS IT STANDS',cls:'tb-gray'});
-    msgs.push({emoji:'🔥',text:'最終節 全5試合の結果で順位が決まります',badge:'注目',cls:'tb-gray'});
   }
   return msgs;
 }
@@ -524,7 +529,7 @@ async function fetchWeather(){
   try{
     const url='https://api.open-meteo.com/v1/forecast?latitude=33.5902&longitude=130.4017'+
       '&hourly=temperature_2m,relativehumidity_2m,weathercode&timezone=Asia%2FTokyo'+
-      '&forecast_days=8';
+      '&forecast_days=14';
     const res=await fetch(url);
     const data=await res.json();
 
@@ -579,12 +584,22 @@ async function fetchWeather(){
 function renderTicker2(teams){
   const confirmMsgs=buildTickerMessages(teams);
   const allMsgs=[...confirmMsgs,...weatherMsgs];
-  const doubled=[...allMsgs,...allMsgs];
   const inner=document.getElementById('ticker-inner');
   if(!inner)return;
-  inner.innerHTML=doubled.map(m=>
+
+  // 最低4回繰り返して途切れないようにする
+  const repeat=Math.max(4, Math.ceil(8/allMsgs.length));
+  const items=Array(repeat).fill(allMsgs).flat();
+  inner.innerHTML=items.map(m=>
     `<span class="ticker-item">${m.emoji} ${m.text} <span class="ticker-badge ${m.cls}">${m.badge}</span></span>`
   ).join('');
+
+  // アニメーション：全幅の半分をスクロール
+  const totalWidth=inner.scrollWidth;
+  const duration=Math.max(20, allMsgs.length*6);
+  inner.style.animation='none';
+  inner.offsetHeight; // reflow
+  inner.style.animation=`tickerScroll ${duration}s linear infinite`;
 }
 
 function renderMatches(){

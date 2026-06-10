@@ -517,57 +517,73 @@ let weatherMsgs = [];
 
 async function fetchWeather(){
   try{
-    const url='https://api.open-meteo.com/v1/forecast?latitude=33.5902&longitude=130.4017'+
-      '&hourly=temperature_2m,relativehumidity_2m,weathercode&timezone=Asia%2FTokyo'+
-      '&forecast_days=8';
+    // wttr.in 現在の天気（福岡市）
+    const url='https://wttr.in/Fukuoka?format=j1';
     const res=await fetch(url);
     const data=await res.json();
 
-    // 6/14の9:00〜14:00のインデックスを探す
-    const times=data.hourly.time;
-    const temps=data.hourly.temperature_2m;
-    const humids=data.hourly.relativehumidity_2m;
-    const codes=data.hourly.weathercode;
-
-    const targetDate='2026-06-14';
-    const targetHours=[9,10,11,12,13];
-
-    const weatherCodeLabel=(code)=>{
-      if(code===0)return{emoji:'☀️',label:'快晴'};
-      if(code<=2)return{emoji:'⛅',label:'晴れ時々曇り'};
-      if(code<=3)return{emoji:'☁️',label:'曇り'};
-      if(code<=49)return{emoji:'🌫️',label:'霧'};
-      if(code<=59)return{emoji:'🌦️',label:'霧雨'};
-      if(code<=69)return{emoji:'🌧️',label:'雨'};
-      if(code<=79)return{emoji:'🌨️',label:'雪/みぞれ'};
-      if(code<=82)return{emoji:'🌧️',label:'にわか雨'};
-      if(code<=99)return{emoji:'⛈️',label:'雷雨'};
-      return{emoji:'🌤️',label:'不明'};
+    const wcLabel=(code)=>{
+      const c=parseInt(code);
+      if(c===113)return{emoji:'☀️',label:'快晴'};
+      if(c===116)return{emoji:'⛅',label:'晴れ時々曇り'};
+      if(c===119||c===122)return{emoji:'☁️',label:'曇り'};
+      if(c===143||c===248||c===260)return{emoji:'🌫️',label:'霧'};
+      if([176,263,266,293,296].includes(c))return{emoji:'🌦️',label:'にわか雨'};
+      if([299,302,305,308,353,356,359].includes(c))return{emoji:'🌧️',label:'雨'};
+      if([200,386,389,392,395].includes(c))return{emoji:'⛈️',label:'雷雨'};
+      if(c>=179&&c<=227)return{emoji:'🌨️',label:'雪'};
+      return{emoji:'🌤️',label:'くもり'};
     };
 
-    // 試合時間帯ごとにメッセージ作成
     weatherMsgs=[];
-    targetHours.forEach(h=>{
-      const key=targetDate+'T'+String(h).padStart(2,'0')+':00';
-      const idx=times.indexOf(key);
-      if(idx<0)return;
-      const t=temps[idx];
-      const hm=humids[idx];
-      const wc=weatherCodeLabel(codes[idx]);
-      weatherMsgs.push({
-        emoji:wc.emoji,
-        text:`${h}:00 ${wc.label} ${t}℃ 湿度${hm}%`,
-        badge:'天気',
-        cls:'tb-gray'
-      });
+    const cur=data.current_condition[0];
+    const wc=wcLabel(cur.weatherCode);
+    const temp=cur.temp_C;
+    const humid=cur.humidity;
+    const feels=cur.FeelsLikeC;
+
+    weatherMsgs.push({
+      emoji:wc.emoji,
+      text:`福岡 現在 ${wc.label} ${temp}℃（体感${feels}℃）湿度${humid}%`,
+      badge:'現在の天気',
+      cls:'tb-gray'
     });
 
-    // レンダリング更新
+    // 6/14の予報（当日〜3日以内の場合）
+    const today=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'}));
+    const target=new Date('2026-06-14');
+    const diffDays=Math.round((target-today)/(1000*60*60*24));
+
+    if(diffDays>=0&&diffDays<=2&&data.weather&&data.weather[diffDays]){
+      const dayData=data.weather[diffDays];
+      weatherMsgs.push({
+        emoji:'📅',
+        text:`6/14予報 最高${dayData.maxtempC}℃ 最低${dayData.mintempC}℃`,
+        badge:'予報',
+        cls:'tb-gray'
+      });
+      // 午前の予報（9時・12時）
+      [{h:9,idx:3},{h:12,idx:4}].forEach(({h,idx})=>{
+        const hr=dayData.hourly[idx];
+        if(!hr)return;
+        const w=wcLabel(hr.weatherCode);
+        weatherMsgs.push({
+          emoji:w.emoji,
+          text:`富士山村広場 ${h}:00予報 ${w.label} ${hr.tempC}℃ 湿度${hr.humidity}%`,
+          badge:'天気予報',
+          cls:'tb-gray'
+        });
+      });
+    }
+
     const{sorted}=calcStandings();
     renderTicker2(sorted);
 
   }catch(e){
     console.error('Weather fetch failed',e);
+    weatherMsgs=[{emoji:'🌤️',text:'天気情報を取得できませんでした',badge:'天気',cls:'tb-gray'}];
+    const{sorted}=calcStandings();
+    renderTicker2(sorted);
   }
 }
 
@@ -755,6 +771,8 @@ renderStandings();
 renderPast();
 loadScores();
 startPolling();
+fetchWeather();
+setInterval(fetchWeather, 3600000);
 </script>
 </body>
 </html>

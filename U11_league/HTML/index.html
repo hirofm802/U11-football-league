@@ -51,7 +51,12 @@ body{font-family:"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text
 @media(max-width:500px){.matches-grid{grid-template-columns:1fr}}
 
 .match-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;transition:border-color .2s,background .2s}
-.match-card.is-live{border-color:var(--live-red);background:var(--live-bg)}
+.match-card.is-live{border-color:var(--live-red)}
+.status-badge{display:inline-flex;align-items:center;gap:4px;font-family:"Barlow Condensed",sans-serif;font-size:11px;font-weight:700;letter-spacing:.05em}
+.status-pre{color:var(--text-muted)}
+.status-soon{color:#b8860b}
+.status-soon::before{content:"";width:6px;height:6px;border-radius:50%;background:#b8860b;animation:pulse 1.2s ease-in-out infinite;display:inline-block;margin-right:2px}
+.status-finished{color:var(--text-muted)}
 .match-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .match-time{font-family:"Barlow Condensed",sans-serif;font-size:12px;letter-spacing:.05em;color:var(--text-muted)}
 .live-badge{display:inline-flex;align-items:center;gap:4px;font-family:"Barlow Condensed",sans-serif;font-size:12px;font-weight:700;color:var(--live-red);letter-spacing:.05em}
@@ -65,7 +70,7 @@ body{font-family:"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text
 .score-input{width:34px;height:34px;text-align:center;font-family:"Barlow Condensed",sans-serif;font-size:18px;font-weight:700;border:1.5px solid var(--border);border-radius:6px;background:#fafbf9;color:var(--text);transition:border-color .15s}
 .score-input:focus{outline:none;border-color:var(--green-mid)}
 .score-input:not(:placeholder-shown){background:var(--green-light);border-color:var(--green-mid)}
-.match-card.is-live .score-input:not(:placeholder-shown){background:#ffe0e0;border-color:var(--live-red)}
+
 .score-sep{font-family:"Barlow Condensed",sans-serif;font-size:16px;color:var(--text-muted)}
 
 .standings-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
@@ -354,15 +359,38 @@ const PAST_MATCHES = [
 ];
 
 const MATCH_DATE = {year:2026,month:6,day:14};
-const LIVE_BEFORE=1, LIVE_AFTER=45;
+const LIVE_BEFORE=1, LIVE_AFTER=47;
+
+function getJST(){
+  return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Tokyo'}));
+}
+
+// 試合ステータス判定: 'pre'(試合前) | 'soon'(まもなくKO) | 'live'(LIVE) | 'finished'(試合終了)
+function getMatchStatus(koH,koM){
+  const jst=getJST();
+  const koMin=koH*60+koM;
+
+  const isMatchDay = jst.getFullYear()===MATCH_DATE.year&&jst.getMonth()+1===MATCH_DATE.month&&jst.getDate()===MATCH_DATE.day;
+  const isAfterMatchDay = jst.getFullYear()>MATCH_DATE.year||
+    (jst.getFullYear()===MATCH_DATE.year&&jst.getMonth()+1>MATCH_DATE.month)||
+    (jst.getFullYear()===MATCH_DATE.year&&jst.getMonth()+1===MATCH_DATE.month&&jst.getDate()>MATCH_DATE.day);
+
+  if(isAfterMatchDay) return 'finished';
+
+  if(isMatchDay){
+    const nowMin=jst.getHours()*60+jst.getMinutes();
+    if(nowMin >= koMin + LIVE_AFTER) return 'finished';
+    if(nowMin >= koMin - LIVE_BEFORE) return 'live';
+    if(nowMin >= koMin - 5) return 'soon';
+    return 'pre';
+  }
+
+  // 当日より前（今日〜試合前日）
+  return 'pre';
+}
 
 function isLive(koH,koM){
-  const now=new Date();
-  const jst=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Tokyo'}));
-  if(jst.getFullYear()!==MATCH_DATE.year||jst.getMonth()+1!==MATCH_DATE.month||jst.getDate()!==MATCH_DATE.day)return false;
-  const nowMin=jst.getHours()*60+jst.getMinutes();
-  const koMin=koH*60+koM;
-  return nowMin>=koMin-LIVE_BEFORE&&nowMin<=koMin+LIVE_AFTER;
+  return getMatchStatus(koH,koM)==='live';
 }
 
 // ロゴ生成（で黒背景除去）
@@ -589,15 +617,27 @@ function renderMatches(){
   const grid=document.getElementById('matches-grid');
   grid.innerHTML='';
   MATCHES.forEach(m=>{
-    const live=isLive(m.koH,m.koM);
+    const status=getMatchStatus(m.koH,m.koM);
     const card=document.createElement('div');
-    card.className='match-card'+(live?' is-live':'');
+    const statusClassMap={pre:'is-prematch',soon:'is-soon',live:'is-live',finished:'is-finished'};
+    card.className='match-card '+statusClassMap[status];
     card.id='card-'+m.id;
 
     const hdr=document.createElement('div');hdr.className='match-header';
     const tEl=document.createElement('span');tEl.className='match-time';tEl.textContent='KO '+m.time;
     hdr.appendChild(tEl);
-    if(live){const b=document.createElement('span');b.className='live-badge';b.textContent='LIVE';hdr.appendChild(b);}
+
+    const badge=document.createElement('span');
+    if(status==='live'){
+      badge.className='live-badge';badge.textContent='LIVE';
+    } else if(status==='soon'){
+      badge.className='status-badge status-soon';badge.textContent='まもなくキックオフ';
+    } else if(status==='pre'){
+      badge.className='status-badge status-pre';badge.textContent='試合前';
+    } else {
+      badge.className='status-badge status-finished';badge.textContent='試合終了';
+    }
+    hdr.appendChild(badge);
     card.appendChild(hdr);
 
     const row=document.createElement('div');row.className='match-row';
@@ -719,9 +759,11 @@ function resetAll(){
 
 function refreshLive(){
   let changed=false;
+  const statusClassMap={pre:'is-prematch',soon:'is-soon',live:'is-live',finished:'is-finished'};
   MATCHES.forEach(m=>{
     const card=document.getElementById('card-'+m.id);if(!card)return;
-    if(isLive(m.koH,m.koM)!==card.classList.contains('is-live'))changed=true;
+    const status=getMatchStatus(m.koH,m.koM);
+    if(!card.classList.contains(statusClassMap[status]))changed=true;
   });
   if(changed)renderMatches();
 }

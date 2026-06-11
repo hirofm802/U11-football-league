@@ -599,7 +599,8 @@ async function fetchWeather(){
 
     const bar=document.getElementById('weather-bar');
     if(bar){
-      bar.innerHTML=`<span class="wicon">${wc.emoji}</span><span>${wc.label} 🌡️${cur.temp_C}℃ 💧${cur.humidity}% 💨${cur.windspeedKmph}km/h</span><span class="wtime">(${mm}/${dd} ${hh}:${mi})</span>`;
+      const windMs=(cur.windspeedKmph/3.6).toFixed(1);
+      bar.innerHTML=`<span class="wicon">${wc.emoji}</span><span>${wc.label} 🌡️${cur.temp_C}℃ 💧${cur.humidity}% 💨${windMs}m/s</span><span class="wtime">(${mm}/${dd} ${hh}:${mi})</span>`;
     }
   }catch(e){
     console.error('Weather failed',e);

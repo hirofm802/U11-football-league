@@ -507,14 +507,30 @@ function buildTickerMessages(teams){
     const confirmed3rd=teamsAboveMe.length<=2;
 
     if(confirmed3rd){
+      // teamsBelowMe: このチームが絶対に下回らない（=自分のmaxPtsが相手の現在勝点を上回る）チーム数
+      const teamsBelowMe=ranked.filter((_,j)=>{
+        if(j===i)return false;
+        return myMax>ranked[j].pts;
+      });
+      // 完全な順位確定 = 自分の上に来うるチーム数（teamsAboveMeの逆: 自分が上回れないチーム）が i と一致
+      const teamsCanBeAbove=ranked.filter((_,j)=>{
+        if(j===i)return false;
+        return maxPts(ranked[j].name,ranked[j].pts)>t.pts;
+      }).length;
+      const teamsCanBeBelow=ranked.length-1-teamsCanBeAbove;
+      const rankFixed = (teamsCanBeAbove===i) && (teamsCanBeBelow>=(ranked.length-1-i));
+
       if(i===0&&t.pts>maxPts(ranked[1].name,ranked[1].pts)){
         msgs.push({emoji:'🏆',text:t.name+' 優勝確定！',badge:'優勝',cls:'tb-gold'});
-      } else if(i===1&&t.pts>maxPts(ranked[2].name,ranked[2].pts)){
+      } else if(i===1&&teamsCanBeAbove===0&&t.pts>maxPts(ranked[2].name,ranked[2].pts)){
         msgs.push({emoji:'🥈',text:t.name+' 2位確定',badge:'2位',cls:'tb-silver'});
-      } else if(i===2&&t.pts>maxPts(ranked[3].name,ranked[3].pts)){
+      } else if(i===2&&teamsCanBeAbove===0&&t.pts>maxPts(ranked[3].name,ranked[3].pts)){
         msgs.push({emoji:'🥉',text:t.name+' 3位確定',badge:'3位',cls:'tb-bronze'});
+      } else if(i>=1){
+        const ord=['','2位','3位'][i]||(i+1)+'位';
+        msgs.push({emoji:'🔹',text:t.name+' '+ord+'以上確定',badge:ord+'以上',cls:'tb-silver'});
       }
-      msgs.push({emoji:'✅',text:t.name+' 1部残留確定',badge:'残留',cls:'tb-green'});
+      msgs.push({emoji:'✅',text:t.name+' 1部残留決定！',badge:'残留',cls:'tb-green'});
     }
 
     // ⬇️ 4位以下確定（プレイオフ確定）

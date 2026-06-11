@@ -762,6 +762,11 @@ function renderPast(){
 }
 
 function resetAll(){
+  const pw=prompt('パスワードを入力してください：');
+  if(!pw||pw.trim().toLowerCase()!==PASSWORD){
+    if(pw!==null)alert('パスワードが違います');
+    return;
+  }
   if(!confirm('スコアをリセットしますか？')) return;
   MATCHES.forEach(m=>{
     const h=document.getElementById(m.id+'_h'),a=document.getElementById(m.id+'_a');

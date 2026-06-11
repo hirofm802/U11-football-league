@@ -783,7 +783,7 @@ function toggleLock() {
   } else {
     // unlock
     const pw = prompt('パスワードを入力してください：');
-    if(pw === PASSWORD) {
+    if(pw && pw.trim().toLowerCase() === PASSWORD) {
       isUnlocked = true;
       document.getElementById('matches-grid').classList.remove('input-locked');
       document.getElementById('lock-status').textContent = '🔓 入力モード（Hiro）';
